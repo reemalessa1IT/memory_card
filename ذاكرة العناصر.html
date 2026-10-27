@@ -1,0 +1,545 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ذاكرة العناصر</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=Readex+Pro:wght@400;500;600&family=Chakra+Petch:wght@600;700&display=swap">
+<style>
+/* Layout: sticky lab HUD (level, score, combo, lives, timer) over a responsive card grid; sheets for start / level / result. Single deliberate dark-violet look. */
+:root {
+  --bg: #14092b;
+  --panel: #21114a;
+  --panel-2: #301870;
+  --line: #4a2d92;
+  --violet: #a35cff;
+  --violet-btn: #8a3ff2;
+  --violet-btn-edge: #5a1fb8;
+  --violet-soft: #c9a2ff;
+  --amber: #ffc247;
+  --ink: #f3ebff;
+  --muted: #b9a8e3;
+  --good: #4fe3b0;
+  --bad: #ff5a7a;
+  --tile-sym: #6a2fd6;
+  --tile-sym-2: #4c1d9e;
+  --tile-name: #efe4ff;
+  --tile-name-ink: #2a1160;
+  --font-display: 'Lalezar', 'Readex Pro', Tahoma, system-ui, sans-serif;
+  --font-body: 'Readex Pro', Tahoma, system-ui, sans-serif;
+  --font-symbol: 'Chakra Petch', 'Readex Pro', Tahoma, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(60% 38% at 85% -8%, rgba(120, 60, 220, .35), transparent 70%),
+    radial-gradient(50% 30% at 5% 105%, rgba(163, 92, 255, .18), transparent 70%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--bg);
+}
+button { font-family: inherit; color: inherit; }
+
+.app {
+  max-width: 1000px; margin: 0 auto;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 40px;
+}
+
+/* HUD */
+.hud {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--panel); border: 2px solid var(--line); border-radius: 18px;
+  padding: 10px 14px 12px; display: grid; gap: 10px;
+  box-shadow: 0 10px 30px rgba(10, 3, 30, .55);
+}
+.hud-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.club { font-size: 12px; font-weight: 600; color: var(--bg); background: var(--violet-soft); padding: 1px 10px; border-radius: 99px; }
+h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 1.1; text-wrap: balance; }
+.icon-btn {
+  width: 38px; height: 38px; border-radius: 12px; border: 2px solid var(--line);
+  background: var(--panel-2); display: grid; place-items: center; cursor: pointer; flex: none;
+}
+.icon-btn:hover { border-color: var(--violet); }
+.icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.icon-btn .slash { display: none; }
+.icon-btn[aria-pressed="true"] .slash { display: block; }
+.icon-btn[aria-pressed="true"] { color: var(--muted); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stat { background: var(--bg); border: 2px solid transparent; border-radius: 12px; padding: 6px 8px; min-width: 0; display: grid; gap: 0; align-content: center; }
+.stat .k { font-size: 11px; color: var(--muted); }
+.stat b { font-family: var(--font-display); font-weight: 400; font-size: 22px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.stat.hot { border-color: var(--amber); }
+.stat.hot b, .stat.hot .k { color: var(--amber); }
+.stat.hot { animation: glow .9s ease-in-out infinite alternate; }
+.hearts { display: flex; gap: 2px; align-items: center; height: 29px; }
+.hearts svg { width: 19px; height: 19px; fill: var(--bad); transition: transform .3s; }
+.hearts svg.lost { fill: var(--line); transform: scale(.8); }
+.hearts.hit { animation: shake .4s; }
+
+.timer { display: flex; align-items: center; gap: 12px; }
+.track { flex: 1; height: 12px; background: var(--bg); border-radius: 99px; overflow: hidden; border: 2px solid var(--line); }
+.bar { height: 100%; width: 100%; background: linear-gradient(90deg, var(--violet), var(--violet-soft)); border-radius: 99px; transition: width .12s linear; }
+.timer.low .bar { background: var(--bad); }
+.timer.low #time { color: var(--bad); animation: throb .5s ease-in-out infinite alternate; }
+#time { font-family: var(--font-display); font-size: 24px; min-width: 2.6ch; text-align: end; font-variant-numeric: tabular-nums; }
+
+.status { min-height: 52px; margin: 12px 2px 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 15px; }
+.status .chip {
+  font-family: var(--font-symbol); font-weight: 700; direction: ltr; background: var(--tile-sym); color: #fff;
+  padding: 1px 10px; border-radius: 8px; font-size: 16px;
+}
+.status b { color: var(--ink); font-weight: 600; }
+.status .count { font-family: var(--font-display); color: var(--amber); font-size: 26px; line-height: 1; }
+
+/* Board */
+.board { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 10px; }
+.card {
+  border: 0; background: none; padding: 0; cursor: pointer; aspect-ratio: 4 / 5;
+  perspective: 700px; container-type: inline-size; -webkit-tap-highlight-color: transparent;
+}
+.card:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; border-radius: 14px; }
+.inner { position: relative; display: block; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .45s cubic-bezier(.3, .7, .2, 1); }
+.card.up .inner { transform: rotateY(180deg); }
+.face {
+  position: absolute; inset: 0; border-radius: 14px; display: grid; place-items: center; overflow: hidden;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.back {
+  border: 2px solid var(--line);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23a35cff' stroke-width='2' opacity='.6'%3E%3Cellipse cx='32' cy='32' rx='22' ry='8'/%3E%3Cellipse cx='32' cy='32' rx='22' ry='8' transform='rotate(60 32 32)'/%3E%3Cellipse cx='32' cy='32' rx='22' ry='8' transform='rotate(120 32 32)'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='4' fill='%23ffc247'/%3E%3C/svg%3E") center / 58% no-repeat,
+    linear-gradient(160deg, var(--panel-2), var(--panel));
+  transition: border-color .15s, transform .15s;
+}
+.card:not(.up):not(.done):hover .back { border-color: var(--violet); transform: translateY(-2px); }
+.front { transform: rotateY(180deg); border: 2px solid transparent; }
+.front.sym { background: linear-gradient(160deg, var(--tile-sym), var(--tile-sym-2)); color: #fff; border-color: var(--violet); }
+.front.name { background: var(--tile-name); color: var(--tile-name-ink); border-color: var(--violet-soft); }
+.z, .tag { position: absolute; top: 8cqw; font-size: 12cqw; line-height: 1; }
+.z { left: 9cqw; font-family: var(--font-symbol); font-weight: 600; direction: ltr; color: var(--amber); }
+.tag { right: 9cqw; font-weight: 500; color: #7a5cc0; }
+.sym-text { font-family: var(--font-symbol); font-weight: 700; font-size: 44cqw; line-height: 1; direction: ltr; padding-top: 6cqw; }
+.name-text { font-weight: 600; font-size: 16cqw; line-height: 1.1; text-align: center; padding: 6cqw 4cqw 0; }
+.card.done { cursor: default; }
+.card.done .front { box-shadow: inset 0 0 0 3px var(--good); }
+.card.done .inner { opacity: .72; }
+.card.bad { animation: shake .4s; }
+.card.good { animation: bump .5s; }
+.card.swap { animation: bump .45s; }
+
+.actions { display: flex; justify-content: center; margin-top: 18px; }
+.ghost {
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 14px; cursor: pointer;
+  background: var(--panel); border: 2px solid var(--line); font-weight: 500; font-size: 15px;
+}
+.ghost svg { width: 20px; height: 20px; fill: var(--amber); }
+.ghost:hover:not(:disabled) { border-color: var(--violet); }
+.ghost:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Sheets */
+.overlay {
+  position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; overflow-y: auto;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(14, 5, 34, .84); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+}
+.sheet {
+  width: min(460px, 100%); background: var(--panel); border: 2px solid var(--line); border-radius: 22px;
+  padding: 26px 24px 22px; display: grid; gap: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+  animation: rise-in .35s cubic-bezier(.3, .8, .3, 1);
+}
+.sheet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 40px; line-height: 1.1; text-wrap: balance; }
+.sheet p { margin: 0; color: var(--muted); }
+.sheet .club { justify-self: start; }
+.rules { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.rules li { display: flex; gap: 10px; align-items: baseline; }
+.rules li span { flex: none; font-family: var(--font-symbol); font-weight: 700; color: var(--amber); direction: ltr; min-width: 2.4ch; }
+.best { font-size: 14px; color: var(--violet-soft); }
+.stars { display: flex; gap: 6px; }
+.stars svg { width: 38px; height: 38px; fill: var(--line); }
+.stars svg.on { fill: var(--amber); animation: bump .5s both; }
+.breakdown { margin: 0; display: grid; gap: 6px; }
+.breakdown div { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px dashed var(--line); }
+.breakdown dt { color: var(--muted); }
+.breakdown dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.breakdown .total dd { color: var(--amber); font-family: var(--font-display); font-weight: 400; font-size: 24px; }
+.next { background: var(--bg); border-radius: 14px; padding: 12px 14px; font-size: 14px; color: var(--muted); }
+.next b { color: var(--ink); }
+.sheet-actions { display: grid; margin-top: 4px; }
+.primary {
+  border: 0; border-bottom: 5px solid var(--violet-btn-edge); background: var(--violet-btn); color: #fff;
+  font-family: var(--font-display); font-size: 24px; padding: 8px 18px 6px; border-radius: 14px; cursor: pointer;
+}
+.primary:hover { background: #9a55ff; }
+.primary:active { transform: translateY(3px); border-bottom-width: 2px; }
+.primary:focus-visible, .ghost:focus-visible, .icon-btn:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+.rank { font-family: var(--font-display); font-size: 26px; color: var(--amber); }
+
+.pop {
+  position: fixed; z-index: 25; pointer-events: none; transform: translate(-50%, -50%);
+  font-family: var(--font-display); font-size: 30px; color: var(--amber); text-shadow: 0 2px 10px rgba(0, 0, 0, .6);
+  animation: rise 1s ease-out forwards; white-space: nowrap;
+}
+.pop.sub { color: var(--bad); }
+#fx { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+
+@keyframes shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.1); } 100% { transform: scale(1); } }
+@keyframes glow { from { box-shadow: 0 0 0 rgba(255, 194, 71, 0); } to { box-shadow: 0 0 16px rgba(255, 194, 71, .55); } }
+@keyframes throb { from { transform: scale(1); } to { transform: scale(1.15); } }
+@keyframes rise { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -70px; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 560px) {
+  h1 { font-size: 24px; }
+  .board { gap: 8px; }
+  .stat b { font-size: 20px; }
+  .hearts svg { width: 16px; height: 16px; }
+  .sheet h2 { font-size: 34px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+
+<div class="app" dir="rtl" lang="ar">
+  <header class="hud">
+    <div class="hud-top">
+      <div class="brand"><span class="club">نادي المختبرات</span><h1>ذاكرة العناصر</h1></div>
+      <button class="icon-btn" id="mute" type="button" aria-label="كتم الصوت" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/><path class="slash" d="M3.3 2.3L2 3.6 20.4 22l1.3-1.3z"/></svg>
+      </button>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="k">المستوى</span><b id="lvl">1/6</b></div>
+      <div class="stat"><span class="k">النقاط</span><b id="score">0</b></div>
+      <div class="stat" id="comboBox"><span class="k">كومبو</span><b id="combo">×1</b></div>
+      <div class="stat"><span class="k">المحاولات</span><span class="hearts" id="hearts"></span></div>
+    </div>
+    <div class="timer" id="timer"><div class="track"><div class="bar" id="bar"></div></div><b id="time">40</b></div>
+  </header>
+  <p class="status" id="status" aria-live="polite"></p>
+  <main class="board" id="board" aria-label="لوحة البطاقات"></main>
+  <div class="actions">
+    <button class="ghost" id="peek" type="button" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+      <span id="peekLabel">كشف سريع</span>
+    </button>
+  </div>
+</div>
+<div class="overlay" id="ov" dir="rtl" lang="ar"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+(function () {
+  document.documentElement.lang = 'ar';
+  document.documentElement.dir = 'rtl';
+
+  var EL = [
+    { s: 'O', n: 'أكسجين', z: 8, f: 'نحتاجه للتنفس وللاحتراق' },
+    { s: 'H', n: 'هيدروجين', z: 1, f: 'أخف عنصر في الكون' },
+    { s: 'C', n: 'كربون', z: 6, f: 'أساس المركبات العضوية، والألماس منه' },
+    { s: 'N', n: 'نيتروجين', z: 7, f: 'يشكل نحو 78% من هواء الأرض' },
+    { s: 'Na', n: 'صوديوم', z: 11, f: 'يتحد مع الكلور ليكوّن ملح الطعام' },
+    { s: 'Fe', n: 'حديد', z: 26, f: 'موجود في هيموغلوبين الدم، ويصدأ' },
+    { s: 'Au', n: 'ذهب', z: 79, f: 'لا يصدأ ولا يتأكسد بسهولة' },
+    { s: 'Ca', n: 'كالسيوم', z: 20, f: 'يبني العظام والأسنان' },
+    { s: 'Cl', n: 'كلور', z: 17, f: 'يعقّم مياه المسابح' },
+    { s: 'He', n: 'هيليوم', z: 2, f: 'غاز خامل يملأ البالونات الطائرة' },
+    { s: 'Mg', n: 'ماغنسيوم', z: 12, f: 'يشتعل بضوء أبيض ساطع' },
+    { s: 'Al', n: 'ألومنيوم', z: 13, f: 'معدن خفيف تُصنع منه علب المشروبات' },
+    { s: 'K', n: 'بوتاسيوم', z: 19, f: 'موجود في الموز وتحتاجه العضلات والأعصاب' },
+    { s: 'Cu', n: 'نحاس', z: 29, f: 'موصل ممتاز للكهرباء، ولونه محمر' },
+    { s: 'Ag', n: 'فضة', z: 47, f: 'أفضل العناصر توصيلاً للكهرباء' },
+    { s: 'Zn', n: 'زنك', z: 30, f: 'يُستخدم لحماية الحديد من الصدأ' },
+    { s: 'S', n: 'كبريت', z: 16, f: 'عنصر أصفر اللون، ومنه تفوح رائحة البيض الفاسد' },
+    { s: 'Si', n: 'سيليكون', z: 14, f: 'أساس الرقائق الإلكترونية' },
+    { s: 'P', n: 'فوسفور', z: 15, f: 'موجود في DNA وفي عظامنا' },
+    { s: 'Hg', n: 'زئبق', z: 80, f: 'المعدن الوحيد السائل في حرارة الغرفة' },
+    { s: 'Pb', n: 'رصاص', z: 82, f: 'معدن ثقيل وسام' },
+    { s: 'Ne', n: 'نيون', z: 10, f: 'يضيء باللون البرتقالي المحمر في اللوحات' },
+    { s: 'Li', n: 'ليثيوم', z: 3, f: 'معدن خفيف في بطاريات الجوال' },
+    { s: 'F', n: 'فلور', z: 9, f: 'أنشط العناصر، ويقوّي الأسنان في المعجون' },
+    { s: 'I', n: 'يود', z: 53, f: 'تحتاجه الغدة الدرقية' },
+    { s: 'Sn', n: 'قصدير', z: 50, f: 'يطلي علب الحفظ ليحميها' },
+    { s: 'U', n: 'يورانيوم', z: 92, f: 'عنصر مشع يُستخدم وقوداً نووياً' }
+  ];
+  var LEVELS = [
+    { pairs: 3, time: 40 }, { pairs: 4, time: 50 }, { pairs: 6, time: 65 },
+    { pairs: 8, time: 80 }, { pairs: 10, time: 95 }, { pairs: 12, time: 110 }
+  ];
+  var CHAOS_FROM = 4;
+  var $ = function (id) { return document.getElementById(id); };
+  var board = $('board'), ov = $('ov');
+
+  var S = { level: 1, score: 0, hearts: 5, combo: 0, maxCombo: 0, phase: 'idle', timeLeft: 40, timeTotal: 40, cards: [], first: null, lock: true, peeked: false, misses: 0, matched: 0, pairs: 3, lastTick: 0, lastSec: 0, pv: null };
+
+  /* ---------- storage ---------- */
+  function getBest() { try { return +localStorage.getItem('element-memory-best') || 0; } catch (e) { return 0; } }
+  function setBest(v) { try { localStorage.setItem('element-memory-best', String(v)); } catch (e) {} }
+
+  /* ---------- sound ---------- */
+  var audio = null, muted = false;
+  function ac() {
+    if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (audio && audio.state === 'suspended') audio.resume();
+    return audio;
+  }
+  function tone(f, d, type, delay, vol) {
+    if (muted) return;
+    var a = ac(); if (!a) return;
+    var t = a.currentTime + (delay || 0), o = a.createOscillator(), g = a.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol || 0.06, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + 0.02);
+  }
+  var sfx = {
+    flip: function () { tone(520, 0.06, 'triangle'); },
+    match: function (c) { tone(660, 0.12, 'sine'); tone(880 + Math.min(c, 5) * 90, 0.2, 'sine', 0.09); },
+    miss: function () { tone(180, 0.25, 'sawtooth', 0, 0.05); },
+    win: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.22, 'triangle', i * 0.1); }); },
+    lose: function () { [330, 262, 196].forEach(function (f, i) { tone(f, 0.28, 'sawtooth', i * 0.15, 0.05); }); },
+    tick: function () { tone(900, 0.04, 'square', 0, 0.025); }
+  };
+  $('mute').addEventListener('click', function () {
+    muted = !muted; this.setAttribute('aria-pressed', String(muted));
+    this.setAttribute('aria-label', muted ? 'تشغيل الصوت' : 'كتم الصوت');
+  });
+
+  /* ---------- helpers ---------- */
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function rank(s) { return s < 3000 ? 'مساعد مختبر' : s < 7000 ? 'فني مختبر' : s < 12000 ? 'كيميائي' : 'عالم مختبرات'; }
+  function colsFor(n) {
+    if (innerWidth < 700) return n <= 6 ? 3 : 4;
+    return { 6: 3, 8: 4, 12: 6, 16: 8, 20: 10, 24: 8 }[n] || 4;
+  }
+  function pop(el, text, cls) {
+    var r = el.getBoundingClientRect(), p = document.createElement('div');
+    p.className = 'pop ' + (cls || ''); p.textContent = text;
+    p.style.left = (r.left + r.width / 2) + 'px'; p.style.top = (r.top + r.height / 2) + 'px';
+    document.body.appendChild(p); setTimeout(function () { p.remove(); }, 1000);
+  }
+  function confetti() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var c = $('fx'), x = c.getContext('2d'); c.width = innerWidth; c.height = innerHeight;
+    var cols = ['#a35cff', '#c9a2ff', '#ffc247', '#4fe3b0', '#ffffff'];
+    var P = []; for (var i = 0; i < 150; i++) P.push({ x: innerWidth / 2, y: innerHeight * 0.4, vx: (Math.random() - 0.5) * 15, vy: -Math.random() * 14 - 3, r: Math.random() * 5 + 3, c: cols[Math.floor(Math.random() * cols.length)], a: Math.random() * 6, va: (Math.random() - 0.5) * 0.3 });
+    var t = 0;
+    (function f() {
+      x.clearRect(0, 0, c.width, c.height);
+      P.forEach(function (p) { p.vy += 0.35; p.x += p.vx; p.y += p.vy; p.a += p.va; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.fillStyle = p.c; x.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); x.restore(); });
+      if (++t < 140) requestAnimationFrame(f); else x.clearRect(0, 0, c.width, c.height);
+    })();
+  }
+
+  /* ---------- board ---------- */
+  function buildBoard(pairs, faceUp) {
+    var pool = EL.slice(0, Math.min(EL.length, pairs + 10));
+    var picks = shuffle(pool.slice()).slice(0, pairs), data = [];
+    picks.forEach(function (e) { data.push({ e: e, kind: 'sym' }); data.push({ e: e, kind: 'name' }); });
+    shuffle(data);
+    board.style.setProperty('--cols', colsFor(data.length));
+    board.innerHTML = data.map(function (d, i) {
+      var front = d.kind === 'sym'
+        ? '<span class="face front sym"><span class="z">' + d.e.z + '</span><span class="sym-text">' + d.e.s + '</span></span>'
+        : '<span class="face front name"><span class="tag">اسم</span><span class="name-text">' + d.e.n + '</span></span>';
+      return '<button class="card' + (faceUp ? ' up' : '') + '" type="button" style="order:' + i + '" data-i="' + i + '" aria-label="بطاقة ' + (i + 1) + '"><span class="inner"><span class="face back"></span>' + front + '</span></button>';
+    }).join('');
+    var els = board.querySelectorAll('.card');
+    S.cards = data.map(function (d, i) { return { el: els[i], e: d.e, kind: d.kind, up: !!faceUp, done: false, order: i }; });
+  }
+  function flip(c, up) {
+    c.up = up; c.el.classList.toggle('up', up);
+    var e = c.e, k = c.kind;
+    c.el.setAttribute('aria-label', up ? (k === 'sym' ? 'الرمز ' + e.s : 'الاسم ' + e.n) : 'بطاقة مقلوبة');
+  }
+  function chaos() {
+    var open = S.cards.filter(function (c) { return !c.done; });
+    var orders = shuffle(open.map(function (c) { return c.order; }));
+    open.forEach(function (c, i) { c.order = orders[i]; c.el.style.order = orders[i]; c.el.classList.remove('swap'); void c.el.offsetWidth; c.el.classList.add('swap'); });
+  }
+
+  /* ---------- HUD ---------- */
+  function updateHUD() {
+    $('lvl').textContent = S.level + '/' + LEVELS.length;
+    $('score').textContent = fmt(S.score);
+    var cm = Math.min(Math.max(S.combo, 1), 5);
+    $('combo').textContent = '×' + cm;
+    $('comboBox').classList.toggle('hot', S.combo >= 2);
+    var h = ''; for (var i = 0; i < 5; i++) h += '<svg class="' + (i < S.hearts ? '' : 'lost') + '" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+    $('hearts').innerHTML = h; $('hearts').setAttribute('aria-label', 'المحاولات المتبقية ' + S.hearts);
+    updateTime();
+    var can = S.phase === 'play' && !S.peeked && !S.first && !S.lock;
+    $('peek').disabled = !can;
+    $('peekLabel').textContent = S.peeked ? 'استخدمت الكشف' : 'كشف سريع';
+  }
+  function updateTime() {
+    var t = Math.max(0, S.timeLeft);
+    $('time').textContent = t >= 10 ? Math.ceil(t) : t.toFixed(1);
+    $('bar').style.width = (S.timeTotal ? (t / S.timeTotal) * 100 : 0) + '%';
+    $('timer').classList.toggle('low', t <= 10 && S.phase === 'play');
+  }
+  function status(html) { $('status').innerHTML = html; }
+
+  /* ---------- game flow ---------- */
+  function newGame() {
+    S.level = 1; S.score = 0; S.hearts = 5; S.maxCombo = 0;
+    startLevel();
+  }
+  function startLevel() {
+    clearInterval(S.pv);
+    var L = LEVELS[S.level - 1];
+    S.pairs = L.pairs; S.timeTotal = L.time; S.timeLeft = L.time; S.misses = 0; S.matched = 0;
+    S.first = null; S.lock = true; S.peeked = false; S.combo = 0; S.levelPts = 0; S.phase = 'preview';
+    buildBoard(L.pairs, true);
+    updateHUD();
+    var left = Math.max(3, Math.ceil(L.pairs * 0.5));
+    var twist = S.level >= CHAOS_FROM ? ' <span>وضع الفوضى: البطاقات تتبدل بعد كل خطأ.</span>' : '';
+    function show() { status('احفظ أماكن البطاقات <span class="count">' + left + '</span>' + twist); }
+    show();
+    S.pv = setInterval(function () {
+      left--;
+      if (left > 0) { show(); sfx.tick(); return; }
+      clearInterval(S.pv);
+      S.cards.forEach(function (c) { flip(c, false); });
+      S.phase = 'play'; S.lock = false; S.lastTick = performance.now(); S.lastSec = Math.ceil(S.timeLeft);
+      status('<b>ابدأ!</b> طابق كل رمز مع اسمه.' + twist);
+      updateHUD();
+    }, 1000);
+  }
+
+  board.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('.card'); if (!btn) return;
+    var card = S.cards[+btn.dataset.i];
+    if (S.phase !== 'play' || S.lock || card.up || card.done) return;
+    ac(); flip(card, true); sfx.flip();
+    if (!S.first) { S.first = card; updateHUD(); return; }
+    var a = S.first, b = card; S.first = null; S.lock = true;
+    if (a.e === b.e) onMatch(a, b); else onMiss(a, b);
+  });
+
+  function onMatch(a, b) {
+    S.combo++; S.maxCombo = Math.max(S.maxCombo, S.combo); S.matched++;
+    var pts = 100 * Math.min(S.combo, 5);
+    S.score += pts; S.levelPts += pts;
+    S.timeLeft = Math.min(S.timeTotal, S.timeLeft + 1);
+    sfx.match(S.combo);
+    pop(b.el, '+' + pts + (S.combo >= 2 ? ' ×' + Math.min(S.combo, 5) : ''));
+    setTimeout(function () {
+      a.done = b.done = true; a.el.classList.add('done', 'good'); b.el.classList.add('done', 'good');
+    }, 380);
+    status('<span class="chip">' + a.e.s + '</span> <b>' + a.e.n + '</b> · الرقم الذري ' + a.e.z + ' · ' + a.e.f);
+    updateHUD();
+    if (S.matched === S.pairs) { S.phase = 'done'; setTimeout(levelComplete, 900); return; }
+    setTimeout(function () { S.lock = false; updateHUD(); }, 250);
+  }
+  function onMiss(a, b) {
+    S.combo = 0; S.misses++; S.hearts--;
+    sfx.miss();
+    a.el.classList.add('bad'); b.el.classList.add('bad');
+    pop(b.el, '−١ محاولة', 'sub');
+    var hb = $('hearts'); hb.classList.remove('hit'); void hb.offsetWidth; hb.classList.add('hit');
+    updateHUD();
+    setTimeout(function () {
+      a.el.classList.remove('bad'); b.el.classList.remove('bad');
+      flip(a, false); flip(b, false);
+      if (S.hearts <= 0) { S.phase = 'done'; return gameOver('انتهت المحاولات'); }
+      if (S.level >= CHAOS_FROM) chaos();
+      S.lock = false; updateHUD();
+    }, 800);
+  }
+
+  $('peek').addEventListener('click', function () {
+    if (S.phase !== 'play' || S.peeked || S.first || S.lock) return;
+    S.peeked = true; S.lock = true; S.combo = 0;
+    S.cards.forEach(function (c) { if (!c.done) flip(c, true); });
+    updateHUD();
+    setTimeout(function () {
+      S.cards.forEach(function (c) { if (!c.done) flip(c, false); });
+      S.lock = false; updateHUD();
+    }, 1300);
+  });
+
+  setInterval(function () {
+    var now = performance.now();
+    if (S.phase !== 'play') { S.lastTick = now; return; }
+    var dt = Math.min(0.5, (now - S.lastTick) / 1000); S.lastTick = now;
+    S.timeLeft -= dt;
+    var sec = Math.ceil(S.timeLeft);
+    if (sec !== S.lastSec) { S.lastSec = sec; if (sec <= 5 && sec > 0) sfx.tick(); }
+    if (S.timeLeft <= 0) { S.timeLeft = 0; updateTime(); timeUp(); return; }
+    updateTime();
+  }, 100);
+
+  function timeUp() {
+    S.phase = 'done'; S.lock = true; sfx.lose(); S.hearts--; updateHUD();
+    if (S.hearts <= 0) return gameOver('انتهى الوقت');
+    overlay('<h2>انتهى الوقت</h2><p>خسرت محاولة واحدة، وباقي لك ' + S.hearts + '. أعد المستوى وجرب ترتب الأماكن في ذهنك بشكل أسرع.</p>', 'أعد المستوى ' + S.level, startLevel);
+  }
+
+  function stars(n) {
+    var s = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+    var out = ''; for (var i = 0; i < 3; i++) out += s.replace('<svg', '<svg' + (i < n ? ' class="on"' : '') + (i < n ? ' style="animation-delay:' + (i * 0.15) + 's"' : ''));
+    return '<div class="stars" role="img" aria-label="' + n + ' من 3 نجوم">' + out + '</div>';
+  }
+
+  function levelComplete() {
+    sfx.win(); confetti();
+    var frac = S.timeLeft / S.timeTotal, n = frac >= 0.5 ? 3 : frac >= 0.25 ? 2 : 1;
+    var timeBonus = Math.ceil(S.timeLeft) * 10, flawless = S.misses === 0, fb = flawless ? 200 : 0;
+    var gained = S.levelPts + timeBonus + fb;
+    S.score += timeBonus + fb;
+    var healed = flawless && S.hearts < 5; if (healed) S.hearts++;
+    updateHUD();
+    var rows = '<dt>نقاط التطابق</dt><dd>' + fmt(S.levelPts) + '</dd><dt>مكافأة الوقت</dt><dd>+' + fmt(timeBonus) + '</dd>' +
+      (flawless ? '<dt>بلا أخطاء</dt><dd>+200' + (healed ? ' و+١ محاولة' : '') + '</dd>' : '');
+    rows = rows.replace(/<dt>(.*?)<\/dt><dd>(.*?)<\/dd>/g, '<div><dt>$1</dt><dd>$2</dd></div>');
+    var summary = '<dl class="breakdown">' + rows + '<div class="total"><dt>مجموع الجولة</dt><dd>' + fmt(gained) + '</dd></div></dl>';
+    if (S.level === LEVELS.length) return finish(true, stars(n) + summary);
+    var nx = LEVELS[S.level];
+    var next = '<div class="next">المستوى القادم <b>' + (S.level + 1) + '</b>: ' + nx.pairs + ' أزواج في ' + nx.time + ' ثانية' +
+      (S.level + 1 >= CHAOS_FROM ? '. <b>وضع الفوضى</b>: البطاقات تتبدل أماكنها بعد كل خطأ.' : '.') + '</div>';
+    overlay('<h2>المستوى ' + S.level + ' تم</h2>' + stars(n) + summary + next, 'المستوى ' + (S.level + 1), function () { S.level++; startLevel(); });
+  }
+
+  function commitBest() { var b = getBest(), isNew = S.score > b; if (isNew) setBest(S.score); return { best: Math.max(b, S.score), isNew: isNew }; }
+  function gameOver(reason) {
+    sfx.lose(); var r = commitBest();
+    overlay('<h2>' + reason + '</h2><p>وصلت إلى المستوى ' + S.level + '، وأعلى كومبو لك ×' + Math.min(S.maxCombo, 5) + (S.maxCombo > 5 ? ' (' + S.maxCombo + ' تطابقات متتالية)' : '') + '.</p>' +
+      '<div class="rank">' + rank(S.score) + '</div>' +
+      '<dl class="breakdown"><div class="total"><dt>نقاطك</dt><dd>' + fmt(S.score) + '</dd></div><div><dt>أعلى نتيجة</dt><dd>' + fmt(r.best) + (r.isNew ? ' (رقم جديد)' : '') + '</dd></div></dl>', 'جرب مرة ثانية', newGame);
+  }
+  function finish(won, extra) {
+    var r = commitBest();
+    overlay('<h2>أنت ' + rank(S.score) + '!</h2><p>أنهيت كل المستويات الستة. حفظت ' + LEVELS.reduce(function (a, l) { return a + l.pairs; }, 0) + ' تطابقاً بين رمز واسم.</p>' + extra +
+      '<dl class="breakdown"><div class="total"><dt>نقاطك</dt><dd>' + fmt(S.score) + '</dd></div><div><dt>أعلى نتيجة</dt><dd>' + fmt(r.best) + (r.isNew ? ' (رقم جديد)' : '') + '</dd></div></dl>', 'العب من جديد', newGame);
+  }
+
+  function overlay(html, label, cb) {
+    ov.innerHTML = '<div class="sheet" role="dialog" aria-modal="true">' + html + '<div class="sheet-actions"><button class="primary" id="ovBtn" type="button">' + label + '</button></div></div>';
+    ov.hidden = false;
+    var b = $('ovBtn'); b.onclick = function () { ac(); ov.hidden = true; cb(); }; b.focus();
+  }
+
+  window.addEventListener('resize', function () { board.style.setProperty('--cols', colsFor(S.cards.length)); });
+
+  /* ---------- first screen: sample board behind the start sheet ---------- */
+  buildBoard(6, true); updateHUD();
+  status('جرب: طابق الرمز مع اسم العنصر.');
+  var best = getBest();
+  overlay('<span class="club">نادي المختبرات</span><h2>ذاكرة العناصر</h2><p>احفظ أماكن البطاقات قبل ما تنقلب، ثم طابق رمز كل عنصر مع اسمه.</p>' +
+    '<ul class="rules"><li><span>٦</span>ست مستويات، وكل مستوى أصعب من اللي قبله</li><li><span>×٥</span>تطابقات متتالية تضاعف نقاطك حتى خمس مرات</li><li><span>٥</span>خمس محاولات فقط، وكل خطأ يخصم واحدة</li></ul>' +
+    '<div class="best">' + (best ? 'أعلى نتيجة عندك: ' + fmt(best) : 'ما فيه نتيجة محفوظة بعد. كن أول رقم!') + '</div>', 'ابدأ التجربة', newGame);
+})();
+</script>
+
+</body></html>
